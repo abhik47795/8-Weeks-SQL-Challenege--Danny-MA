@@ -1,0 +1,75 @@
+ select * from regions;
+ select * from customer_nodes;
+ select * from customer_transactions;
+  
+  create view dd as
+  select a.*,b.region_name,c.txn_date,c.txn_type,c.txn_amount from customer_nodes a join regions b on a.region_id=b.region_id
+  join customer_transactions c on a.customer_id=c.customer_id;
+  
+select * from dd;
+
+
+/*
+How many unique nodes are there on the Data Bank system?
+What is the number of nodes per region?
+How many customers are allocated to each region?
+How many days on average are customers reallocated to a different node?
+What is the median, 80th and 95th percentile for this same reallocation days metric for each region?
+*/
+
+
+select count(distinct node_id) from dd;
+select count(node_id),region_name from dd group by region_id;
+select count(customer_id),region_name from dd group by region_id;
+select * from dd order by customer_id;
+
+#--
+create view tr as
+select region_id,round(avg(b.diff)) as nn from(
+select *,if(node_id!=nxtnode,abs(datediff(nxtdate,start_date)),0) as diff from (
+with cte as
+(
+select customer_id,region_id,node_id,start_date from dd order by region_id
+)
+select *,lead(node_id,1,node_id) over(partition by region_id) as nxtnode,
+lead(start_date,1,start_date) over(partition by customer_id,region_id) as nxtdate from cte) as a) as b group by
+customer_id,region_id;
+select * from tr;
+  
+#--
+select * from(
+select *,round((percent_rank() over (partition by region_id order by nn))*100) as pr from tr) as a
+where (a.pr>=77 and a.pr<=81) or (a.pr>=93 and a.pr<=95);
+
+/*
+What is the unique count and total amount for each transaction type?
+What is the average total historical deposit counts and amounts for all customers?
+For each month - how many Data Bank customers make more than 1 deposit and either 1 purchase or 1 withdrawal in a single month?
+What is the closing balance for each customer at the end of the month?
+What is the percentage of customers who increase their closing balance by more than 5%?
+*/
+
+
+select * from dd;
+
+
+select txn_type,count(distinct txn_type),sum(txn_amount) from dd group by txn_type;
+select customer_id,avg(txn_amount) from dd where txn_type='deposit' group by customer_id;
+select customer_id,count(customer_id),month(start_date) as mnt,txn_type from dd group by customer_id,txn_type
+having (txn_type='deposit' and count(customer_id)>1) or (txn_type='withdrawl' and count(customer_id)=1) or 
+(txn_type='purchase' and count(customer_id)>1)
+order by customer_id,mnt;
+
+
+
+select * from(
+select *,sum(amount) over (partition by mnt) as bal,0.05*amt+amt as 'upper'
+from(
+with cte as
+(
+select txn_type,sum(txn_amount) as amt,month(end_date) as mnt from dd group by txn_type,mnt order by mnt
+)
+select *,
+case when txn_type='withdrawal' then -amt else amt
+end as amount
+from cte) as a) as b where txn_type='deposit' and bal>upper;
