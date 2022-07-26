@@ -1,0 +1,28 @@
+#How many customers has Foodie-Fi ever had?
+select count(*) as cnt from rt;
+#-What is the monthly distribution of trial plan start_date values for our dataset use the start of the month as the group by value
+with cte as
+(
+select *,month(start_date) as mnt from rt where plan_name='trial' order by start_date
+)
+select mnt,count(plan_id) from cte group by mnt order by mnt;
+
+#--What plan start_date values occur after the year 2020 for our dataset? Show the breakdown by count of events for each plan_name
+
+select * from rt where year(start_date)!= 2020 order by start_date;
+#--What is the customer count and percentage of customers who have churned rounded to 1 decimal place?
+
+select * from rt where plan_id=4 order by start_date;
+select round((select count(*) from rt where plan_id=4)/(select count(*) from rt)*100,1);
+
+#--How many customers have churned straight after their initial free trial, what percentage is this rounded to the nearest whole number?
+
+select * from(
+with cte as
+(
+select plan_id,customer_id,start_date from rt where plan_id in(0,4) order by customer_id
+)
+select *,lead(plan_id,1,plan_id) over (partition by customer_id order by start_date) as nxtplan,
+lead(customer_id,1,customer_id) over (partition by customer_id order by start_date) as nxtcust
+from cte) as a
+where a.plan_id!=a.nxtplan and customer_id=nxtcust;
