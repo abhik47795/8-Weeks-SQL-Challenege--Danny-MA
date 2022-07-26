@@ -1,0 +1,55 @@
+#--What is the total amount each customer spent at the restaurant?
+select customer_id,sum(price) as tot from sales a join menu b on a.product_id=b.product_id group by customer_id; 
+
+#--How many days has each customer visited the restaurant?
+select customer_id,count(distinct order_date) as cnt from sales group by customer_id;
+
+#--What was the first item from the menu purchased by each customer?
+select * from (
+select a.*,rank() over(partition by customer_id order by order_date) as rnk from(
+select a.*,b.product_name from sales a join menu b on a.product_id=b.product_id) as a) as b where rnk=1;
+
+#--What is the most purchased item on the menu and how many times was it purchased by all customers?
+with cte as
+(
+select product_name,count(product_name) as totcnt from(
+select a.*,b.product_name from sales a join menu b on a.product_id=b.product_id) as a group by product_name
+)
+select product_name from cte where totcnt=(select max(totcnt) from cte);
+
+#--Which item was purchased first by the customer after they became a member?
+
+select * from sales;
+select * from menu;
+select * from members;
+  
+select a.*,b.join_date,sum(c.price) from sales a join members b on a.customer_id=b.customer_id
+join menu c on a.product_id=c.product_id
+where order_date>join_date
+group by customer_id;
+
+#--Which item was purchased just before the customer became a member?
+select a.*,b.join_date,min(datediff(join_date,order_date)) from sales a join members b on a.customer_id=b.customer_id
+where order_date<join_date
+group by customer_id;
+
+#--What is the total items and amount spent for each member before they became a member?
+select a.*,b.join_date,sum(price),count(a.product_id) from sales a join members b on a.customer_id=b.customer_id
+join menu c on a.product_id=c.product_id
+where order_date<join_date
+group by customer_id;
+
+#--If each $1 spent equates to 10 points and sushi has a 2x points multiplier - how many points would each customer have?
+
+select customer_id,sum(pts) as tot from(
+select a.*,if(product_name='sushi', price*20,price*10) as pts from(
+select a.*,b.product_name,b.price from sales a join menu b on a.product_id=b.product_id) as a) as b group by customer_id;
+
+#--
+with cte as
+(
+select a.customer_id,a.order_date,b.product_name,b.price,
+if(order_date<join_date,'N','Y') as member from sales a left join menu b on a.product_id=b.product_id
+left join members c on a.customer_id=c.customer_id order by customer_id
+)
+select *,if(member='N',null,dense_rank() over(partition by customer_id order by order_date)) as rnk from cte;
